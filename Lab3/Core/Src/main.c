@@ -4,7 +4,7 @@
   * з інтервалом 2 сек. Реалізувати відображення прийнятого рядка у вигляді сигналів
   * за таблицею Морзе на світлодіоді PA5.
   * USART6 передає, USART1 (PB7 — RX) приймає.
-  * Реалізація: CMSIS (регістри) + State Machine (автомат станів).
+  *
   */
 /* USER CODE END Header */
 
@@ -101,7 +101,7 @@ int main(void)
 					processIndex = 0;
 					currentState = APP_STATE_TRANSMITTING;
 				}
-				// Перевірка чи зібрано слово повністю?
+				// Перевірка чи зібрано слово повністю
 				else if (rxIndex >= txLen && processIndex == 0) {
 					currentState = APP_STATE_MORSE_PROCESS;
 				}

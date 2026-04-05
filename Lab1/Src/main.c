@@ -37,7 +37,7 @@
 
 void Delay(volatile uint32_t iterations) {
     while(iterations--) {
-        __NOP(); // Keeps the timing stable and prevents optimization
+        __NOP(); // prevents optimization
     }
 }
 
@@ -78,10 +78,10 @@ int main(void) {
 		GPIOA->BSRR = (1 << (PA5 + 16)); // Turn OFF
 
 		if (use_25Hz) {
-			// 25 Hz = 40ms period -> 10ms ON / 30ms OFF
+			// 25 Hz = 40ms period: 10ms ON / 30ms OFF
 			delay_ms(30);
 		} else {
-			// 50 Hz = 20ms period -> 10ms ON / 10ms OFF
+			// 50 Hz = 20ms period: 10ms ON / 10ms OFF
 			delay_ms(10);
 		}
 	}
