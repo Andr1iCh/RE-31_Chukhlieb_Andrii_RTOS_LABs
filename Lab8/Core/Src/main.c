@@ -16,10 +16,9 @@
   ******************************************************************************
   */
 /*
- * Варіант 7. Створити три потоки для керування світлодіодами PA5, PB13, PB14.
- * Частоти: PA5 — 1 Гц(тривалість 400 мс), PB13— 0.25 Гц (тривалість 1 с),
- * PB14— 0.1 Гц (тривалість 2 с).
- * Кнопка PC13 змінює тривалість імпульсу PA5 від 400 мс до 1 с.
+ * 3. Створити чотири потоки для PA5, PB13 PС2 PС3, які працюють з різними частотами (1 Гц, 2
+Гц, 5 Гц, 10 Гц). Кнопки PC13 PB7 PA14 PA15 змінюють duty cycle кожного світлодіода через повідомлення
+у чергу.
  */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
@@ -29,7 +28,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "FreeRTOS.h"
-#include "task.h"
+#include "queue.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -56,7 +55,10 @@ const osThreadAttr_t defaultTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* USER CODE BEGIN PV */
-volatile uint32_t duration_PA5 = 400;
+xQueueHandle queue1;
+xQueueHandle queue2;
+xQueueHandle queue3;
+xQueueHandle queue4;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -64,12 +66,11 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 void StartDefaultTask(void *argument);
 
-
 /* USER CODE BEGIN PFP */
-void LedTaskPA5(void *argument);
-void LedTaskPB13(void *argument);
-void LedTaskPB14(void *argument);
-void ButtonTask(void *argument);
+void LedTask1(void *argument);
+void LedTask2(void *argument);
+void LedTask3(void *argument);
+void LedTask4(void *argument);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -127,6 +128,10 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
+   queue1 = xQueueCreate(5, sizeof(uint8_t));
+   queue2 = xQueueCreate(5, sizeof(uint8_t));
+   queue3 = xQueueCreate(5, sizeof(uint8_t));
+   queue4 = xQueueCreate(5, sizeof(uint8_t));
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
@@ -135,12 +140,10 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
-  xTaskCreate(LedTaskPA5, "LED_PA5", 128, NULL, 1, NULL);
-  xTaskCreate(LedTaskPB13, "LED_PB13", 128, NULL, 1, NULL);
-  xTaskCreate(LedTaskPB14, "LED_PB14", 128, NULL, 1, NULL);
-  // Button task usually gets a slightly higher priority to respond quickly
-  xTaskCreate(ButtonTask, "BTN_PC13", 128, NULL, 2, NULL);
-
+  xTaskCreate(LedTask1, "LED1", 128, (void*)queue1, 1, NULL);
+  xTaskCreate(LedTask2, "LED2", 128, (void*)queue2, 1, NULL);
+  xTaskCreate(LedTask3, "LED3", 128, (void*)queue3, 1, NULL);
+  xTaskCreate(LedTask4, "LED4", 128, (void*)queue4, 1, NULL);
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
@@ -225,12 +228,12 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13|GPIO_PIN_14, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : PC13 */
-  GPIO_InitStruct.Pin = GPIO_PIN_13;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  /*Configure GPIO pins : PC13 PC2 PC3 */
+  GPIO_InitStruct.Pin = GPIO_PIN_13|GPIO_PIN_2|GPIO_PIN_3;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pins : USART_TX_Pin USART_RX_Pin */
@@ -248,12 +251,31 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PB13 PB14 */
-  GPIO_InitStruct.Pin = GPIO_PIN_13|GPIO_PIN_14;
+  /*Configure GPIO pins : PB13 PB14 PB15 */
+  GPIO_InitStruct.Pin = GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PB7 */
+  GPIO_InitStruct.Pin = GPIO_PIN_7;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI2_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(EXTI2_IRQn);
+
+  HAL_NVIC_SetPriority(EXTI3_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(EXTI3_IRQn);
+
+  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
+
+  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
@@ -261,62 +283,119 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
-// Task 1: PA5 at 1 Hz
-void LedTaskPA5(void *argument) {
-  while(1) {
-    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
-    vTaskDelay(duration_PA5);
+    // Статичні змінні зберігають попередній стан для кожної кнопки
+    static uint8_t duty1 = 50, duty2 = 50, duty3 = 50, duty4 = 50;
 
-    // If duration is 1000ms, led is constantly on
-    if (duration_PA5 < 1000) {
-        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
-        vTaskDelay(1000 - duration_PA5); // Wait for the remaining time in the 1s period
+    // Кнопка 1 (PC13) -> LED 1 (PA5)
+    if (GPIO_Pin == GPIO_PIN_13) {
+        duty1 = (duty1 + 25) % 125; // Перемикає: 50->75->100->0->25->50...
+        xQueueSendFromISR(queue1, &duty1, &xHigherPriorityTaskWoken);
     }
-  }
-}
-
-// Task 2: PB13 at 0.25 Hz
-void LedTaskPB13(void *argument) {
-	while(1) {
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_SET);
-    vTaskDelay(1000); // ON for 1 sec
-
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_RESET);
-    vTaskDelay(3000); // OFF for 3 sec
-  }
-}
-
-// Task 3: PB14 at 0.1 Hz
-void LedTaskPB14(void *argument) {
-	while(1) {
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_SET);
-    vTaskDelay(2000); // ON for 2 sec
-
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
-    vTaskDelay(8000); // OFF for 8 sec
-  }
-}
-
-// Task 4: Button
-void ButtonTask(void *argument) {
-	 while(1) {
-    if (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13) == GPIO_PIN_RESET) {
-
-      // Toggle the duration between 400ms and 1000ms
-      if (duration_PA5 == 400) {
-          duration_PA5 = 1000;
-      } else {
-          duration_PA5 = 400;
-      }
-
-      // Delay to debounce
-      vTaskDelay(300);
+    // Кнопка 2 (PB7) -> LED 2 (PB13)
+    else if (GPIO_Pin == GPIO_PIN_7) {
+        duty2 = (duty2 + 25) % 125;
+        xQueueSendFromISR(queue2, &duty2, &xHigherPriorityTaskWoken);
+    }
+    // Кнопка 3 (PС2) -> LED 3 (PB14)
+    else if (GPIO_Pin == GPIO_PIN_2) {
+        duty3 = (duty3 + 25) % 125;
+        xQueueSendFromISR(queue3, &duty3, &xHigherPriorityTaskWoken);
+    }
+    // Кнопка 4 (PС3) -> LED 4 (PB15)
+    else if (GPIO_Pin == GPIO_PIN_3) {
+        duty4 = (duty4 + 25) % 125;
+        xQueueSendFromISR(queue4, &duty4, &xHigherPriorityTaskWoken);
     }
 
-    // Check the button every 50ms
-    vTaskDelay(50);
-  }
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+}
+
+// Потік 1: PA5, Частота 1 Гц (Період 1000 мс)
+void LedTask1(void *argument) {
+    uint8_t duty = 50; // За замовчуванням 50%
+    uint32_t period = 1000;
+
+    for(;;) {
+        xQueueReceive(queue1, &duty, 0); // Перевіряємо чергу без блокування
+
+        uint32_t on_time = (period * duty) / 100;
+        uint32_t off_time = period - on_time;
+
+        if (on_time > 0) {
+            HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
+            vTaskDelay(pdMS_TO_TICKS(on_time));
+        }
+        if (off_time > 0) {
+            HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
+            vTaskDelay(pdMS_TO_TICKS(off_time));
+        }
+    }
+}
+
+// Потік 2: PB13, Частота 2 Гц (Період 500 мс)
+void LedTask2(void *argument) {
+    uint8_t duty = 50;
+    uint32_t period = 500;
+
+    for(;;) {
+        xQueueReceive(queue2, &duty, 0);
+        uint32_t on_time = (period * duty) / 100;
+        uint32_t off_time = period - on_time;
+
+        if (on_time > 0) {
+            HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_SET);
+            vTaskDelay(pdMS_TO_TICKS(on_time));
+        }
+        if (off_time > 0) {
+            HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_RESET);
+            vTaskDelay(pdMS_TO_TICKS(off_time));
+        }
+    }
+}
+
+// Потік 3: PB14, Частота 5 Гц (Період 200 мс)
+void LedTask3(void *argument) {
+    uint8_t duty = 50;
+    uint32_t period = 200;
+
+    for(;;) {
+        xQueueReceive(queue3, &duty, 0);
+        uint32_t on_time = (period * duty) / 100;
+        uint32_t off_time = period - on_time;
+
+        if (on_time > 0) {
+            HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_SET);
+            vTaskDelay(pdMS_TO_TICKS(on_time));
+        }
+        if (off_time > 0) {
+            HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
+            vTaskDelay(pdMS_TO_TICKS(off_time));
+        }
+    }
+}
+
+// Потік 4: PB15, Частота 10 Гц (Період 100 мс)
+void LedTask4(void *argument) {
+    uint8_t duty = 50;
+    uint32_t period = 100;
+
+    for(;;) {
+        xQueueReceive(queue4, &duty, 0);
+        uint32_t on_time = (period * duty) / 100;
+        uint32_t off_time = period - on_time;
+
+        if (on_time > 0) {
+            HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_SET);
+            vTaskDelay(pdMS_TO_TICKS(on_time));
+        }
+        if (off_time > 0) {
+            HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_RESET);
+            vTaskDelay(pdMS_TO_TICKS(off_time));
+        }
+    }
 }
 /* USER CODE END 4 */
 
@@ -340,7 +419,7 @@ void StartDefaultTask(void *argument)
 
 /**
   * @brief  Period elapsed callback in non blocking mode
-  * @note   This function is called  when TIM4 interrupt took place, inside
+  * @note   This function is called  when TIM3 interrupt took place, inside
   * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
   * a global variable "uwTick" used as application time base.
   * @param  htim : TIM handle
@@ -351,7 +430,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   /* USER CODE BEGIN Callback 0 */
 
   /* USER CODE END Callback 0 */
-  if (htim->Instance == TIM4)
+  if (htim->Instance == TIM3)
   {
     HAL_IncTick();
   }
